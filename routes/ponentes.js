@@ -11,7 +11,8 @@ router.get('/', async (req, res, next) => {
     
     let query = supabase
       .from('ponentes')
-      .select('*');
+      .select('*')
+      .eq('disponible', true); // Por defecto, solo mostrar ponentes disponibles
 
     // Filtros
     if (search) {
@@ -22,8 +23,23 @@ router.get('/', async (req, res, next) => {
       query = query.eq('especialidad', especialidad);
     }
 
-    if (disponible !== undefined) {
-      query = query.eq('disponible', disponible === 'true');
+    // Solo permitir mostrar no disponibles si se especifica explícitamente
+    if (disponible !== undefined && disponible === 'false') {
+      query = supabase
+        .from('ponentes')
+        .select('*')
+        .eq('disponible', false);
+        
+      // Re-aplicar otros filtros si es necesario
+      if (search) {
+        query = query.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,especialidad.ilike.%${search}%`);
+      }
+      if (especialidad) {
+        query = query.eq('especialidad', especialidad);
+      }
+      if (pais) {
+        query = query.eq('pais', pais);
+      }
     }
 
     if (pais) {
@@ -43,9 +59,27 @@ router.get('/', async (req, res, next) => {
     }
 
     // Obtener count total para paginación
-    const { count: totalCount, error: countError } = await supabase
+    let countQuery = supabase
       .from('ponentes')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('disponible', true); // Por defecto, contar solo los disponibles
+
+    // Si se solicitan específicamente los no disponibles, contar solo esos
+    if (disponible !== undefined && disponible === 'false') {
+      countQuery = supabase
+        .from('ponentes')
+        .select('*', { count: 'exact', head: true })
+        .eq('disponible', false);
+    }
+
+    // Aplicar filtros al conteo
+    if (search) {
+      countQuery = countQuery.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,especialidad.ilike.%${search}%`);
+    }
+    if (especialidad) countQuery = countQuery.eq('especialidad', especialidad);
+    if (pais) countQuery = countQuery.eq('pais', pais);
+
+    const { count: totalCount, error: countError } = await countQuery;
 
     if (countError) {
       throw countError;

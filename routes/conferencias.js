@@ -26,7 +26,8 @@ router.get('/', async (req, res, next) => {
         *,
         ponentes!inner(id, nombre, apellido, especialidad, institucion),
         salas!inner(id, nombre, codigo, ubicacion, capacidad)
-      `);
+      `)
+      .neq('estado', 'Cancelada'); // Por defecto, no mostrar conferencias canceladas
 
     // Filtros
     if (search) {
@@ -42,7 +43,42 @@ router.get('/', async (req, res, next) => {
     }
 
     if (estado) {
-      query = query.eq('estado', estado);
+      // Si se especifica un estado específico, remover el filtro por defecto y aplicar el solicitado
+      if (estado === 'Cancelada') {
+        query = supabase
+          .from('conferencias')
+          .select(`
+            *,
+            ponentes!inner(id, nombre, apellido, especialidad, institucion),
+            salas!inner(id, nombre, codigo, ubicacion, capacidad)
+          `)
+          .eq('estado', estado);
+          
+        // Re-aplicar otros filtros
+        if (search) {
+          query = query.or(`titulo.ilike.%${search}%,descripcion.ilike.%${search}%,categoria.ilike.%${search}%`);
+        }
+        if (categoria) {
+          query = query.eq('categoria', categoria);
+        }
+        if (tipo) {
+          query = query.eq('tipo', tipo);
+        }
+        if (fecha_inicio) {
+          query = query.gte('fecha', fecha_inicio);
+        }
+        if (fecha_fin) {
+          query = query.lte('fecha', fecha_fin);
+        }
+        if (ponente_id) {
+          query = query.eq('ponente_id', ponente_id);
+        }
+        if (sala_id) {
+          query = query.eq('sala_id', sala_id);
+        }
+      } else {
+        query = query.eq('estado', estado);
+      }
     }
 
     if (fecha_inicio) {
@@ -77,7 +113,8 @@ router.get('/', async (req, res, next) => {
     // Obtener count total para paginación
     let countQuery = supabase
       .from('conferencias')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .neq('estado', 'Cancelada'); // Por defecto, no contar las canceladas
 
     // Aplicar los mismos filtros al conteo
     if (search) {
@@ -85,7 +122,27 @@ router.get('/', async (req, res, next) => {
     }
     if (categoria) countQuery = countQuery.eq('categoria', categoria);
     if (tipo) countQuery = countQuery.eq('tipo', tipo);
-    if (estado) countQuery = countQuery.eq('estado', estado);
+    if (estado) {
+      // Si se solicitan específicamente las canceladas, contar solo esas
+      if (estado === 'Cancelada') {
+        countQuery = supabase
+          .from('conferencias')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado', estado);
+        // Re-aplicar filtros
+        if (search) {
+          countQuery = countQuery.or(`titulo.ilike.%${search}%,descripcion.ilike.%${search}%,categoria.ilike.%${search}%`);
+        }
+        if (categoria) countQuery = countQuery.eq('categoria', categoria);
+        if (tipo) countQuery = countQuery.eq('tipo', tipo);
+        if (fecha_inicio) countQuery = countQuery.gte('fecha', fecha_inicio);
+        if (fecha_fin) countQuery = countQuery.lte('fecha', fecha_fin);
+        if (ponente_id) countQuery = countQuery.eq('ponente_id', ponente_id);
+        if (sala_id) countQuery = countQuery.eq('sala_id', sala_id);
+      } else {
+        countQuery = countQuery.eq('estado', estado);
+      }
+    }
     if (fecha_inicio) countQuery = countQuery.gte('fecha', fecha_inicio);
     if (fecha_fin) countQuery = countQuery.lte('fecha', fecha_fin);
     if (ponente_id) countQuery = countQuery.eq('ponente_id', ponente_id);

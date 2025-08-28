@@ -11,7 +11,8 @@ router.get('/', async (req, res, next) => {
     
     let query = supabase
       .from('salas')
-      .select('*');
+      .select('*')
+      .eq('disponible', true); // Por defecto, solo mostrar salas disponibles
 
     // Filtros
     if (search) {
@@ -22,8 +23,26 @@ router.get('/', async (req, res, next) => {
       query = query.eq('tipo', tipo);
     }
 
-    if (disponible !== undefined) {
-      query = query.eq('disponible', disponible === 'true');
+    // Solo permitir mostrar no disponibles si se especifica explícitamente
+    if (disponible !== undefined && disponible === 'false') {
+      query = supabase
+        .from('salas')
+        .select('*')
+        .eq('disponible', false);
+        
+      // Re-aplicar otros filtros si es necesario
+      if (search) {
+        query = query.or(`nombre.ilike.%${search}%,codigo.ilike.%${search}%,ubicacion.ilike.%${search}%`);
+      }
+      if (tipo) {
+        query = query.eq('tipo', tipo);
+      }
+      if (capacidad_min) {
+        query = query.gte('capacidad', parseInt(capacidad_min));
+      }
+      if (capacidad_max) {
+        query = query.lte('capacidad', parseInt(capacidad_max));
+      }
     }
 
     if (capacidad_min) {
@@ -49,14 +68,31 @@ router.get('/', async (req, res, next) => {
     // Obtener count total para paginación
     let countQuery = supabase
       .from('salas')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('disponible', true); // Por defecto, contar solo las disponibles
 
     // Aplicar los mismos filtros al conteo
     if (search) {
       countQuery = countQuery.or(`nombre.ilike.%${search}%,codigo.ilike.%${search}%,ubicacion.ilike.%${search}%`);
     }
     if (tipo) countQuery = countQuery.eq('tipo', tipo);
-    if (disponible !== undefined) countQuery = countQuery.eq('disponible', disponible === 'true');
+    
+    // Si se solicitan específicamente las no disponibles, contar solo esas
+    if (disponible !== undefined && disponible === 'false') {
+      countQuery = supabase
+        .from('salas')
+        .select('*', { count: 'exact', head: true })
+        .eq('disponible', false);
+      
+      // Re-aplicar filtros
+      if (search) {
+        countQuery = countQuery.or(`nombre.ilike.%${search}%,codigo.ilike.%${search}%,ubicacion.ilike.%${search}%`);
+      }
+      if (tipo) countQuery = countQuery.eq('tipo', tipo);
+      if (capacidad_min) countQuery = countQuery.gte('capacidad', parseInt(capacidad_min));
+      if (capacidad_max) countQuery = countQuery.lte('capacidad', parseInt(capacidad_max));
+    }
+    
     if (capacidad_min) countQuery = countQuery.gte('capacidad', parseInt(capacidad_min));
     if (capacidad_max) countQuery = countQuery.lte('capacidad', parseInt(capacidad_max));
 
